@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: build-and-push-image-
+spec:
+  entrypoint: build-and-push
+  volumes:
+    - name: docker-socket
+      hostPath:
+        path: /var/run/docker.sock
+        type: Socket
+
+  templates:
+    - name: build-and-push
+      steps:
+        - - name: build-docker-image
+            template: build-docker
+        - - name: push-docker-image
+            template: push-docker
+
+    - name: build-docker
+      container:
+        image: docker:20.10.7
+        command: [ "docker", "build", "-t", "{{inputs.parameters.image}}", "."]
+        volumeMounts:
+          - mountPath: /var/run/docker.sock
+            name: docker-socket
+
+    - name: push-docker
+      container:
+        image: amazon/aws-cli:latest
+        command: [ "sh", "-c", "aws ecr get-login-password --region {{inputs.parameters.region}} | docker login --username AWS --password-stdin {{inputs.parameters.ecr_registry }} && docker push {{inputs.parameters.image }}" ]
+      inputs:
+        parameters:
+          - name: image
+          - name: region
+          - name: ecr_registry
